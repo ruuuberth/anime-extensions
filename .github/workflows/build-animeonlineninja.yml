@@ -1,0 +1,39 @@
+name: Build AnimeOnline.Ninja APK
+
+on:
+  push:
+    branches:
+      - ci/build-animeonlineninja
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout fix branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/animeonlineninja-ww4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: 25
+          distribution: temurin
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK
+        run: ./gradlew :src:es:animeonlineninja:assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: animeonlineninja-debug
+          path: src/es/animeonlineninja/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
