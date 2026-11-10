@@ -23,6 +23,8 @@ import keiyoushi.utils.bodyString
 import keiyoushi.utils.parallelCatchingFlatMapBlocking
 import keiyoushi.utils.useAsJsoup
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Document
@@ -30,21 +32,41 @@ import org.jsoup.nodes.Element
 
 @Source
 abstract class AnimeOnlineNinja : DooPlay() {
+    // Local-only workaround for Aniyomi's Cloudflare interceptor: the site
+    // serves an interactive challenge that the app's detached WebView cannot
+    // solve. Google Translate's proxy passes it, so every request to the
+    // proxy host gets the parameters it expects.
     override val client by lazy {
-        if (preferences.getBoolean(PREF_VRF_INTERCEPT_KEY, PREF_VRF_INTERCEPT_DEFAULT)) {
-            network.client.newBuilder()
-                .addInterceptor(VrfInterceptor())
-                .build()
-        } else {
-            network.client
+        network.client.newBuilder()
+            .addInterceptor(GTranslateInterceptor(GTRANSLATE_HOST))
+            .apply {
+                if (preferences.getBoolean(PREF_VRF_INTERCEPT_KEY, PREF_VRF_INTERCEPT_DEFAULT)) {
+                    addInterceptor(VrfInterceptor())
+                }
+            }
+            .build()
+    }
+
+    private class GTranslateInterceptor(private val proxyHost: String) : Interceptor {
+        override fun intercept(chain: Interceptor.Chain): Response {
+            val request = chain.request()
+            if (request.url.host != proxyHost) return chain.proceed(request)
+
+            val url = request.url.newBuilder().apply {
+                if (request.url.queryParameter("_x_tr_sl") == null) addQueryParameter("_x_tr_sl", "auto")
+                if (request.url.queryParameter("_x_tr_tl") == null) addQueryParameter("_x_tr_tl", "es")
+                if (request.url.queryParameter("_x_tr_hl") == null) addQueryParameter("_x_tr_hl", "es")
+            }.build()
+
+            return chain.proceed(request.newBuilder().url(url).build())
         }
     }
 
     // ============================== Popular ===============================
     // The trending section paginates as /tendencias/page/N/ (its own pager
-    // links); /tendencias/N is a WordPress 404. ww4. is the current canonical
-    // host: ww3. and ver2. 301 their deep paths here, so keep each request
-    // single-hopped on ww4. and let CloudflareInterceptor solve it.
+    // links); /tendencias/N is a WordPress 404. Requests go through Google
+    // Translate's proxy because the site serves an interactive Cloudflare
+    // challenge that Aniyomi's detached WebView cannot solve.
     override fun popularAnimeRequest(page: Int) = GET(if (page == 1) "$baseUrl/tendencias/" else "$baseUrl/tendencias/page/$page/", headers)
 
     override fun popularAnimeSelector() = latestUpdatesSelector()
@@ -116,13 +138,13 @@ abstract class AnimeOnlineNinja : DooPlay() {
 
     // Old links point at the mirrors the source used before ww4., and DooPlay
     // rejects any host that is not the current baseUrl. Rewrite them to the
-    // canonical host so previously shared/imported URLs keep opening.
+    // proxy host so previously shared/imported URLs keep opening.
     override suspend fun getSearchAnime(page: Int, query: String, filters: AnimeFilterList): AnimesPage {
         if (query.startsWith("https://")) {
             val url = query.toHttpUrl()
             if (url.host in LEGACY_HOSTS) {
                 val migratedQuery = url.newBuilder()
-                    .host(baseUrl.toHttpUrl().host)
+                    .host(GTRANSLATE_HOST)
                     .build()
                     .toString()
                 return super.getSearchAnime(page, migratedQuery, filters)
@@ -283,6 +305,19 @@ abstract class AnimeOnlineNinja : DooPlay() {
         attr("abs:srcset").substringBefore(" "),
         attr("abs:src"),
     ).firstOrNull { it.isNotEmpty() && !it.startsWith("data:") }
+        ?.toProxyUrl()
+
+    // Covers are absolute URLs on the origin host, so Jsoup's `abs:` handling
+    // leaves them pointing at Cloudflare. Move them to the proxy host, which
+    // serves the same files without a challenge.
+    private fun String.toProxyUrl(): String {
+        val url = toHttpUrlOrNull() ?: return this
+        return if (url.host in LEGACY_HOSTS) {
+            url.newBuilder().host(GTRANSLATE_HOST).build().toString()
+        } else {
+            this
+        }
+    }
 
     override val additionalInfoItems = listOf("Título", "Temporadas", "Episodios", "Duración media")
 
@@ -371,12 +406,19 @@ abstract class AnimeOnlineNinja : DooPlay() {
     override val episodeNumberRegex by lazy { Regex("""(\d+(?:\.\d+)?)$""") }
 
     companion object {
+        private const val GTRANSLATE_HOST = "ww4-animeonline-ninja.translate.goog"
+
         private val LEGACY_HOSTS = setOf(
             "animeonline.ninja",
             "www.animeonline.ninja",
             "ver.animeonline.ninja",
+            "ww2.animeonline.ninja",
             "ww3.animeonline.ninja",
+            "ww4.animeonline.ninja",
+            "www1.animeonline.ninja",
             "ver2.animeonline.ninja",
+            "veranime.top",
+            "www.veranime.top",
         )
 
         private const val PREF_LANG_KEY = "preferred_lang"
