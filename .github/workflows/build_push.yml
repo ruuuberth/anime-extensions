@@ -243,6 +243,18 @@ jobs:
       - name: Wait for repo checkout
         wait: checkout-repo
 
+      - name: Use the SSH deploy key to push
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # GitHub's ed25519 host key, pinned from https://api.github.com/meta
+          printf '%s\n' 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > ~/.ssh/known_hosts
+          # GITHUB_TOKEN can only write to this repository, so the published repo is
+          # pushed to over SSH with a deploy key that has write access to it.
+          git -C repo remote set-url origin git@github.com:ruuuberth/anime-repo.git
+          git -C repo remote -v
+
       - name: Publish repo
         env:
           DELETE: ${{ needs.prepare.outputs.delete }}

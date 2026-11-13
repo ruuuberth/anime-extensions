@@ -248,6 +248,10 @@ From `.github/workflows/build_pull_request.yml` + `.github/scripts/`:
 - Signing secrets in `ruuuberth/anime-extensions`: `SIGNING_KEY` (base64 of the keystore), `ALIAS`,
   `KEY_STORE_PASSWORD`, `KEY_PASSWORD`. **The keystore lives outside the repo** (`~/.config/aniyomi-extensions/`);
   losing it means already-installed extensions can never be updated, so back it up.
+- The publish job pushes to `ruuuberth/anime-repo` over **SSH** with the `DEPLOY_KEY` secret, because `GITHUB_TOKEN`
+  can only write to the repository the workflow runs in (a cross-repo HTTPS push fails with 403). The matching
+  deploy key is registered on `ruuuberth/anime-repo` with write access; GitHub's ed25519 host key is pinned in
+  `known_hosts` (from `https://api.github.com/meta`). The private key lives outside the repo too.
 - `auto_merge_upstream.yml` and `codeberg_mirror.yml` stay gated to `yuzono/anime-extensions`, so they are no-ops here.
 - Fork-only workflow: `.github/workflows/build-animeonlineninja.yml` – on a push to `ci/build-animeonlineninja`
   it builds `:src:es:animeonlineninja:assembleDebug` from branch `local/animeonlineninja-gtranslate` and uploads
