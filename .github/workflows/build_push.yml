@@ -98,7 +98,7 @@ jobs:
         # If any changes caused by the merge commit, skip this step because versions should already pumped with that merge.
         # But that should be avoided because our own extensions may not be bumped.
       - name: Bump extensions that use a modified lib
-        if: steps.modified-libs.outputs.any_changed == 'true' && steps.set-env.outputs.SKIP_BUMP != 'true' && github.repository == 'yuzono/anime-extensions'
+        if: steps.modified-libs.outputs.any_changed == 'true' && steps.set-env.outputs.SKIP_BUMP != 'true'
         env:
           COMMIT_MESSAGE: ${{ steps.set-env.outputs.LATEST_COMMIT_MESSAGE }}
         run: |
@@ -191,7 +191,6 @@ jobs:
 
       - name: Upload APKs (${{ matrix.chunk.number }})
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: github.repository == 'yuzono/anime-extensions'
         with:
           name: "individual-apks-${{ matrix.chunk.number }}"
           path: |
@@ -205,11 +204,13 @@ jobs:
   publish:
     name: Publish extension repo
     needs: [prepare, build]
+    permissions:
+      # Needed to push the published index and APKs to ruuuberth/anime-repo
+      contents: write
     if: >-
       !cancelled()
       && needs.prepare.result == 'success'
       && (needs.build.result == 'success' || needs.build.result == 'skipped')
-      && github.repository == 'yuzono/anime-extensions'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -218,8 +219,8 @@ jobs:
         background: true
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: yuzono/aniyomi-repo
-          token: ${{ secrets.BOT_PAT }}
+          repository: ruuuberth/anime-repo
+          token: ${{ secrets.GITHUB_TOKEN }}
           ref: repo
           path: repo
           fetch-depth: 0
@@ -246,6 +247,11 @@ jobs:
         env:
           DELETE: ${{ needs.prepare.outputs.delete }}
           FULL_REBUILD: ${{ needs.prepare.outputs.full_rebuild }}
+          EXTENSION_REPO: ruuuberth/anime-repo
+          REPO_NAME: Ruuberth Extensions
+          REPO_BADGE_LABEL: RE
+          REPO_WEBSITE: https://github.com/ruuuberth/anime-repo
+          REPO_DISCORD: ''
         run: |
           cd repo
           pip install "protobuf>=7.35.1,<8"
