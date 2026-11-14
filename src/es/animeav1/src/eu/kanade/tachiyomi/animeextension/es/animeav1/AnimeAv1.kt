@@ -247,8 +247,16 @@ abstract class AnimeAv1 :
             }
             "yourupload" -> yourUploadExtractor.videoFromUrl(url, headers = headers, prefix = "$prefix ")
             "player.zilla" -> {
+                // The CDN requires the browser's Sec-Fetch headers on the media segments
+                // (`/segs/*`), which OkHttp/ExoPlayer never send on their own; without
+                // them playback fails with a Cloudflare 403.
                 val m3u = url.replace("play/", "m3u8/")
-                listOf(Video(m3u, "$prefix HLS", m3u))
+                val hlsHeaders = headers.newBuilder()
+                    .set("Sec-Fetch-Dest", "empty")
+                    .set("Sec-Fetch-Mode", "cors")
+                    .set("Sec-Fetch-Site", "same-origin")
+                    .build()
+                listOf(Video(videoUrl = m3u, videoTitle = "$prefix HLS", headers = hlsHeaders))
             }
             else -> universalExtractor.videosFromUrl(url, headers, prefix = "$prefix ")
         }
