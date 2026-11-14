@@ -3,116 +3,132 @@ package eu.kanade.tachiyomi.animeextension.es.animeav1
 import aniyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.animesource.model.Video
 import keiyoushi.network.get
-import keiyoushi.utils.bodyString
 import keiyoushi.utils.decodeHex
 import keiyoushi.utils.parseAs
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
 import okhttp3.CacheControl
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-// uns.bio player ("UPNShare"). The player API answers with hex-encoded AES-CBC JSON listing one HLS
-// playlist per delivery network; `r` must be the host of the page embedding the player.
-class UnsExtractor(private val client: OkHttpClient, private val headers: Headers, private val siteHost: String) {
+// uns.bio player ("UPNShare"). The embed no longer serves the stream itself: it calls
+// `/api/public/resolve?file1=<id>` which redirects to a TurboEmbed player page
+// (`https://<host>/<file2>`). That page fetches a signed `/api/stream/tracking?c=<enc>`
+// endpoint whose `x-tracking` response header carries an AES-CBC payload listing the
+// stream endpoints (`tiktok`/`hls`/`direct`). The AES key rotates daily and the IV is
+// derived from the player host, so everything is rebuilt on every call.
+class UnsExtractor(private val client: OkHttpClient, private val headers: Headers) {
 
     private val playlistUtils by lazy { PlaylistUtils(client, headers) }
 
     suspend fun videosFromUrl(url: String, prefix: String = ""): List<Video> {
-        val playerUrl = url.toHttpUrl()
-        val origin = "${playerUrl.scheme}://${playerUrl.host}"
-        val videoId = playerUrl.fragment?.substringBefore("&")?.takeIf(String::isNotEmpty) ?: return emptyList()
+        val hosterUrl = url.toHttpUrl()
+        val file1 = hosterUrl.fragment?.takeIf(String::isNotEmpty) ?: return emptyList()
+
+        val resolveUrl = hosterUrl.newBuilder()
+            .encodedPath("/api/public/resolve")
+            .addQueryParameter("file1", file1)
+            .build()
+        val resolve = client.get(resolveUrl, headers, cacheControl = CacheControl.FORCE_NETWORK, ensureSuccess = false)
+            .parseAs<Resolve>()
+            .takeIf { it.ok }
+            ?: return emptyList()
+        val playerUrl = resolve.url?.toHttpUrlOrNull() ?: return emptyList()
+        val origin = playerUrl.newBuilder()
+            .encodedPath("/")
+            .query(null)
+            .fragment(null)
+            .build()
+            .toString()
+        // The player signs the last segment of its own path (pathname.split("/").pop()).
+        val slug = playerUrl.pathSegments.lastOrNull().orEmpty()
+        if (slug.isEmpty()) return emptyList()
 
         val playerHeaders = headers.newBuilder()
-            .set("Referer", "$origin/")
+            .set("Referer", origin)
             .build()
 
-        val apiUrl = "$origin/api/v1/video".toHttpUrl().newBuilder()
-            .addQueryParameter("id", videoId)
-            .addQueryParameter("w", "1920")
-            .addQueryParameter("h", "1080")
-            .addQueryParameter("r", siteHost)
+        val crypto = TurboEmbedCrypto(playerUrl.host)
+        val trackingUrl = playerUrl.newBuilder()
+            .encodedPath("/api/stream/tracking")
+            .addQueryParameter("c", crypto.encryptHex(slug))
             .build()
+        val payload = client.get(trackingUrl, playerHeaders, cacheControl = CacheControl.FORCE_NETWORK, ensureSuccess = false)
+            .use { it.headers["x-tracking"] }
+            ?.takeIf(String::isNotEmpty)
+            ?.let(crypto::decryptHex)
+            ?: return emptyList()
+        val stream = payload.parseAs<Tracking>().stream ?: return emptyList()
 
-        val payload = client.get(apiUrl, playerHeaders, cacheControl = CacheControl.FORCE_NETWORK).bodyString().trim()
-        val streams = decrypt(payload).parseAs<UnsStreams>()
-
-        val config = runCatching { streams.streamingConfig?.parseAs<StreamingConfig>() }.getOrNull() ?: StreamingConfig()
-        val cloudflarePath = streams.cf?.takeIf(String::isNotBlank) ?: streams.cfNative
-        val paths = mapOf(
-            "Cloudflare" to cloudflarePath,
-            "Google" to streams.hlsVideoGoogle,
-            "In-House" to streams.source,
-        )
-
-        return config.order.flatMap { network ->
-            val path = paths[network]?.takeIf(String::isNotBlank) ?: return@flatMap emptyList()
-            val adjustment = config.adjust[network]
-            if (adjustment?.disabled == true) return@flatMap emptyList()
+        return stream.sources().flatMap { (label, file) ->
             runCatching {
-                val resolvedUrl = resolve(origin, path).toHttpUrl()
-                val playlistUrl = resolvedUrl.newBuilder().apply {
-                    (adjustment?.params as? JsonObject)?.forEach { (key, value) ->
-                        (value as? JsonPrimitive)?.contentOrNull?.let { setQueryParameter(key, it) }
-                    }
-                    adjustment?.domain?.takeIf(String::isNotBlank)?.let { domain ->
-                        encodedPath(resolvedUrl.encodedPath.replace("/hls/", "/hlsmod/$domain/"))
-                    }
-                }.build().toString()
                 playlistUtils.extractFromHls(
-                    playlistUrl,
-                    referer = "$origin/",
+                    file,
+                    referer = origin,
                     masterHeaders = playerHeaders,
                     videoHeaders = playerHeaders,
-                    videoNameGen = { quality -> "${prefix}UPNShare $network - $quality" },
+                    videoNameGen = { quality -> "${prefix}$label - $quality" },
                 )
             }.getOrDefault(emptyList())
         }
     }
 
-    private fun resolve(origin: String, path: String): String = when {
-        path.startsWith("//") -> "https:$path"
-        path.startsWith("http") -> path
-        else -> origin + "/" + path.removePrefix("/")
+    @Serializable
+    private class Resolve(val ok: Boolean = false, val url: String? = null)
+
+    @Serializable
+    private class Tracking(val stream: Stream? = null)
+
+    @Serializable
+    private class Stream(val tiktok: String? = null, val hls: String? = null, val direct: String? = null) {
+        // The player probes them in this order and falls through on error.
+        fun sources(): List<Pair<String, String>> = buildList {
+            tiktok?.takeIf(String::isNotBlank)?.let { add("UPNShare TikTok" to it) }
+            hls?.takeIf(String::isNotBlank)?.let { add("UPNShare" to it) }
+            direct?.takeIf(String::isNotBlank)?.let { add("UPNShare Direct" to it) }
+        }
+    }
+}
+
+// Mirrors the TurboEmbed player's crypto (deobfuscated from its bundle): an AES-128-CBC key
+// built from the hex codepoints of a fixed emoji string plus the current UTC day, and an IV
+// built from a second emoji string plus the UTF-8 hex of the player host. Both are cut or
+// zero-padded to 32 hex characters (16 bytes).
+private class TurboEmbedCrypto(private val host: String) {
+
+    fun encryptHex(plain: String): String = cipher(Cipher.ENCRYPT_MODE)
+        .doFinal(plain.toByteArray(Charsets.UTF_8))
+        .toHexString()
+
+    fun decryptHex(payload: String): String = String(
+        cipher(Cipher.DECRYPT_MODE).doFinal(payload.decodeHex()),
+        Charsets.UTF_8,
+    )
+
+    private fun cipher(mode: Int): Cipher {
+        val key = buildString {
+            KEY_CHARS.forEach { append(it.codePointAt(0).toString(16)) }
+            append((System.currentTimeMillis() / 86_400_000L).toString(16))
+        }.take(32).padEnd(32, '0')
+
+        val iv = buildString {
+            SALT_CHARS.forEach { append(it.codePointAt(0).toString(16)) }
+            append(host.toByteArray(Charsets.UTF_8).joinToString("") { "%02x".format(it) })
+        }.take(32).padEnd(32, '0')
+
+        return Cipher.getInstance("AES/CBC/PKCS5Padding").apply {
+            init(mode, SecretKeySpec(key.decodeHex(), "AES"), IvParameterSpec(iv.decodeHex()))
+        }
     }
 
-    private fun decrypt(hex: String): String {
-        val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
-        cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(KEY, "AES"), IvParameterSpec(IV))
-        return String(cipher.doFinal(hex.decodeHex()), Charsets.UTF_8)
-    }
-
-    @Serializable
-    class UnsStreams(
-        val hlsVideoGoogle: String? = null,
-        val cf: String? = null,
-        val cfNative: String? = null,
-        val source: String? = null,
-        val streamingConfig: String? = null,
-    )
-
-    @Serializable
-    private class StreamingConfig(
-        val order: List<String> = listOf("Google", "Cloudflare", "In-House"),
-        val adjust: Map<String, NetworkAdjustment> = emptyMap(),
-    )
-
-    @Serializable
-    private class NetworkAdjustment(
-        val disabled: Boolean = false,
-        val domain: String? = null,
-        val params: JsonElement? = null,
-    )
+    private fun ByteArray.toHexString(): String = joinToString("") { "%02x".format(it) }
 
     companion object {
-        private val KEY = "kiemtienmua911ca".toByteArray()
-        private val IV = "1234567890oiuytr".toByteArray()
+        private val KEY_CHARS = listOf("𝕊", "𝔼", "𝕮", "𝚁", "𝔼", "𝚃", "𝓚", "𝓔", "𝓨", "𝟙", "𝟚", "𝟛")
+        private val SALT_CHARS = listOf("🔐", "🗝️", "🔑", "🚪", "🛡️", "⚡")
     }
 }
