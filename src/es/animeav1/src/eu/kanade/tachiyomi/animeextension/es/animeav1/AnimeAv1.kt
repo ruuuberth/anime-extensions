@@ -56,19 +56,16 @@ abstract class AnimeAv1 :
         private val PREF_LANG_VALUES = arrayOf("SUB", "", "DUB")
 
         private const val PREF_SERVER_KEY = "preferred_server"
-        private const val PREF_SERVER_DEFAULT = "PixelDrain"
+        private const val PREF_SERVER_DEFAULT = "HLS"
+
+        // The servers the site actually lists on every episode (SUB/DUB); "Mega"
+        // comes from the episode's download links.
         private val SERVER_LIST = arrayOf(
-            "PixelDrain",
-            "UPNShare",
-            "Mega",
             "HLS",
-            "StreamWish",
+            "UPNShare",
             "Voe",
-            "YourUpload",
-            "DoodStream",
-            "FileLions",
-            "VidHide",
-            "StreamTape",
+            "MP4Upload",
+            "Mega",
         )
 
         private val MEGA_HOSTS = listOf("mega.nz", "mega.co.nz")
@@ -178,7 +175,11 @@ abstract class AnimeAv1 :
         val dubServers = servers("DUB", DUB_REGEX)
         val subServers = servers("SUB", SUB_REGEX)
 
-        return (dubServers + subServers).distinctBy { it.first to it.third }.map { (url, server, type) ->
+        return (dubServers + subServers).distinctBy { it.first to it.third }.mapNotNull { (url, server, type) ->
+            // Byse videos can't be extracted (signed token + iframe domain allowlist
+            // + proof-of-work module), so don't list the hoster; the app would only
+            // show it in a collapsed "empty hosters" section.
+            if (server.equals("Byse", ignoreCase = true)) return@mapNotNull null
             val matched = findServer(url.toHttpUrlOrNull()?.host.orEmpty().lowercase(Locale.ROOT))
                 ?: findServer(server.lowercase(Locale.ROOT))
             val name = when (matched) {
@@ -195,8 +196,14 @@ abstract class AnimeAv1 :
         return serverVideoResolver(hoster.hosterUrl, data.language, data.server).sortVideos()
     }
 
+    // A stored value from an older version may name a server the site no longer
+    // offers; fall back to the default instead of sorting against a dead name.
+    private fun preferredServer(): String = preferences.getString(PREF_SERVER_KEY, null)
+        ?.takeIf { it in SERVER_LIST }
+        ?: PREF_SERVER_DEFAULT
+
     override fun List<Hoster>.sortHosters(): List<Hoster> {
-        val server = preferences.getString(PREF_SERVER_KEY, PREF_SERVER_DEFAULT)!!
+        val server = preferredServer()
         val language = preferences.getString(PREF_LANG_KEY, PREF_LANG_DEFAULT)!!
         return sortedWith(
             compareByDescending<Hoster> { it.hosterName.contains(language, true) }
@@ -285,7 +292,7 @@ abstract class AnimeAv1 :
 
     override fun List<Video>.sortVideos(): List<Video> {
         val quality = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!
-        val server = preferences.getString(PREF_SERVER_KEY, PREF_SERVER_DEFAULT)!!
+        val server = preferredServer()
         val langPref = preferences.getString(PREF_LANG_KEY, PREF_LANG_DEFAULT)!!
         return this.sortedWith(
             compareBy(
