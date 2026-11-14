@@ -33,8 +33,16 @@ REPO_ICON_DIR = REPO_DIR / "icon"
 REPO_APK_DIR.mkdir(parents=True, exist_ok=True)
 REPO_ICON_DIR.mkdir(parents=True, exist_ok=True)
 
-APK_BASE_URL = "https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk"
-ICON_BASE_URL = "https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/icon"
+# The repository the index and the APKs are published to. Override EXTENSION_REPO to publish
+# to a fork; the upstream values stay as defaults so upstream picks keep applying cleanly.
+EXTENSION_REPO = os.environ.get("EXTENSION_REPO", "yuzono/anime-repo")
+APK_BASE_URL = os.environ.get("APK_BASE_URL", f"https://cdn.jsdelivr.net/gh/{EXTENSION_REPO}@repo/apk")
+ICON_BASE_URL = os.environ.get("ICON_BASE_URL", f"https://cdn.jsdelivr.net/gh/{EXTENSION_REPO}@repo/icon")
+REPO_NAME = os.environ.get("REPO_NAME", "Yūzōnō")
+REPO_BADGE_LABEL = os.environ.get("REPO_BADGE_LABEL", "Yū")
+REPO_WEBSITE = os.environ.get("REPO_WEBSITE", "https://yuzono.github.io")
+REPO_DISCORD = os.environ.get("REPO_DISCORD", "https://discord.gg/85MZhUX688")
+DEFAULT_SIGNING_KEY = "cbec121aa82ebb02aaa73806992e0368a97d47b5451ed6524816d03084c45905"
 
 to_delete: list[str] = json.loads(sys.argv[1])
 # Every extension was rebuilt from scratch: the build output is the source of truth, so
@@ -127,12 +135,37 @@ for directory, keep in referenced.items():
             print(f"removing unreferenced {file.relative_to(REPO_DIR)}")
             file.unlink()
 
+
+def resolve_signing_key() -> str:
+    """
+    The fingerprint the app compares the APK signature against. It must match the one in
+    the published repo.json, so take it from there when it is available.
+    """
+    env_key = os.environ.get("SIGNING_KEY_FINGERPRINT")
+    if env_key:
+        return env_key
+
+    repo_json = REPO_DIR / "repo.json"
+    if repo_json.is_file():
+        try:
+            fingerprint = json.loads(repo_json.read_text(encoding="utf-8"))["meta"][
+                "signingKeyFingerprint"
+            ]
+        except (json.JSONDecodeError, KeyError):
+            fingerprint = ""
+        if fingerprint:
+            return fingerprint
+
+    return DEFAULT_SIGNING_KEY
+
+
 index = index_pb2.Index(
-    name="Yūzōnō",
-        badgeLabel="Yū",
-        signingKey="cbec121aa82ebb02aaa73806992e0368a97d47b5451ed6524816d03084c45905",
-        contact=index_pb2.Contact(
-            website="https://yuzono.github.io", discord="https://discord.gg/85MZhUX688"
+    name=REPO_NAME,
+    badgeLabel=REPO_BADGE_LABEL,
+    signingKey=resolve_signing_key(),
+    contact=index_pb2.Contact(
+        website=REPO_WEBSITE,
+        discord=REPO_DISCORD or None,
     ),
     extensionList=index_pb2.ExtensionList(extensions=all_extensions),
 )
