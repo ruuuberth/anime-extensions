@@ -2,7 +2,7 @@
 
 @CONTRIBUTING.md
 
-> **Import note:** `@CONTRIBUTING.md` is expanded automatically by agents that support `@`-imports (Claude Code, Gemini CLI, OpenCode, Pi, etc. – see [agents.md#faq](https://agents.md) and [pi#6291](https://github.com/earendil-works/pi/issues/6291)). If your harness does not expand it, read `CONTRIBUTING.md` directly – it is the source of truth. This file is a concise, agent-oriented summary.
+> **Import note:** `@CONTRIBUTING.md` is expanded automatically by agents that support `@`-imports (Claude Code, Gemini CLI, OpenCode, Pi, etc. – see [agents.md#faq](https://agents.md) and [pi#6291](https://github.com/earendil-works/pi/issues/6291)). If your harness does not expand it, read `CONTRIBUTING.md` directly – it is the source of truth. `CLAUDE.md` is just a shim that imports this file.
 
 ## Project
 
@@ -25,12 +25,30 @@ Anikku/Animiru (Aniyomi forks).
 ## Environment (this workspace)
 
 - **Termux/Linux with no Android SDK** (`ANDROID_HOME` unset, no `local.properties`) and the Gradle wrapper cannot even
-  bootstrap: downloading `gradle-9.7.1-bin.zip` times out. **Don't plan on running `./gradlew` here** – verification
-  goes through GitHub Actions. Say plainly in your report what could not be run.
+  bootstrap: downloading `gradle-9.7.1-bin.zip` times out. **Don't plan on running `./gradlew` here** – not even the
+  unit tests. Verification goes through GitHub Actions. Say plainly in your report what could not be run.
 - Java 21 is installed; CI uses Java 25, so even with the SDK a local build wouldn't match CI.
 - No `gpg` binary and no `commit.gpgsign` config: commits can't be GPG-signed here, so the cherry-pick skill's
   "signature must show `G`" check is not satisfiable in this workspace.
 - `gh` is authenticated as `ruuuberth`; use it for PRs and to read CI runs.
+
+## Workflow for AI agents (mandatory)
+
+Work in this order, and do not skip to the code:
+
+1. **Write the plan first.** State what changes, in which module/file, the expected behaviour, the verification step
+   and the version bump that implies. Scope it to one module: the build has ~337 modules.
+2. **Write the failing test next.** Every behaviour change needs an executable check that fails *before* the fix:
+   - Shared logic → JUnit 4 test in `core/src/test/kotlin/keiyoushi/utils/` (or `lib/<lib>/test/kotlin/…`), using
+     `org.junit.Test` + `org.junit.Assert.*` and descriptive backticked test names.
+   - Extension-specific logic → the modules under `src/<lang>/<source>` have **no test source set**, so the check is an
+     executable probe against the live site (a throwaway script in `/tmp`, e.g. `curl`/`ffmpeg`) that reproduces the
+     failure and is re-run after the fix. Record the before/after in the PR description.
+   - Run it and confirm it fails **for the expected reason** (not a compile error), then implement.
+3. **Then the code**, then the version bump (one bump per module per PR), then branch → PR → green CI → squash-merge.
+
+Note: CI only compiles (`<module>:assembleRelease|Debug`); it **does not run the unit tests**, and there is no local
+Android SDK to run them either. Keep tests self-contained and pure so they can be run wherever an SDK exists.
 
 ## Commands
 
@@ -40,8 +58,7 @@ Anikku/Animiru (Aniyomi forks).
 - Verify a change (fast – no APK link/package step): `./gradlew :src:<lang>:<source>:compileDebugKotlin`
   (e.g. `./gradlew :src:en:anizone:compileDebugKotlin`, `./gradlew :lib-multisrc:anikototheme:compileDebugKotlin`)
 - Build an installable APK: `./gradlew :src:<lang>:<source>:assembleDebug`
-- Format (local only – **CI does not run Spotless**): `./gradlew :<module>:spotlessCheck` / `:<module>:spotlessApply`
-  (ktlint 1.8.0; Spotless overrides `max_line_length`, so it never wraps long lines)
+- Format (local only): `./gradlew :<module>:spotlessCheck` / `:<module>:spotlessApply`
 - Scaffold a new extension instead of writing files by hand:
   `python ext-bootstrap.py -n "My Source" -l en -u https://mysource.com` (add `-m <theme>` for a themed one)
 - Build all: `./gradlew assembleDebug` – avoid; narrow `settings.gradle.kts` instead (see below)
@@ -49,11 +66,19 @@ Anikku/Animiru (Aniyomi forks).
 Module paths are colon-separated and mirror the directory layout: `:src:en:miruro`,
 `:lib-multisrc:anikototheme`, `:core`.
 
+### Formatting is enforced by CI (Spotless/ktlint)
+
+`gradle/build-logic/src/main/kotlin/AndroidBasePlugin.kt` wires `preBuild` → `spotlessKotlinCheck`, so **every**
+`assemble*` in CI fails on a ktlint violation (a green-looking PR that fails only on formatting costs a full run).
+ktlint version comes from `gradle/libs.versions.toml` (currently 1.8.0); Spotless overrides `max_line_length` to unlimited, so long lines
+are never wrapped – but a multi-line expression that fits on one line must be written on one line. `spotlessApply`
+needs the SDK, so write the code already formatted.
+
 ### Tests
 
-The repo's only unit tests are in `core/src/test/kotlin/keiyoushi/utils/`, `lib/unpacker/test/kotlin/`
-and `lib/megaextractor/test/`. Extensions have none – they are verified by compiling and running
-against the live site (`CONTRIBUTING.md#submitting-the-changes` ~ `1768`).
+The repo's only unit tests live in `core/src/test/kotlin/keiyoushi/utils/`, `lib/unpacker/test/kotlin/` and
+`lib/megaextractor/test/` (JUnit 4). Extensions have none – they are verified by compiling and running against the
+live site (`CONTRIBUTING.md` → *Submitting the changes*).
 
 ```bash
 ./gradlew --continue :core:testDebugUnitTest :lib:unpacker:testDebugUnitTest :lib:megaextractor:testDebugUnitTest
@@ -62,8 +87,8 @@ against the live site (`CONTRIBUTING.md#submitting-the-changes` ~ `1768`).
 
 ### Loading a subset of modules
 
-`settings.gradle.kts` calls `loadAllIndividualExtensions()`, which includes every extension under
-`src/`. To work on a few, comment it out and list them instead – do not commit the narrowed file:
+`settings.gradle.kts` calls `loadAllIndividualExtensions()`, which includes every extension under `src/`.
+To work on a few, comment it out and list them instead – do not commit the narrowed file:
 
 ```kotlin
 // loadAllIndividualExtensions()
@@ -80,7 +105,7 @@ loadIndividualExtension("en", "miruro")
   labeled entries) or `baseUrl { custom("…") }` – and optional `name`, `id`, `versionId`).
   - The source class is `@Source abstract class` with no `lang`/`id`/`versionId` overrides, which KSP rejects; it may
     override `name`, or `baseUrl` over a static `baseUrl`, and codegen then skips that property, but this is
-    discouraged. KSP generates `ExtensionGenerated` from the blocks (`CONTRIBUTING.md#source-declaration`).
+    discouraged. KSP generates `ExtensionGenerated` from the blocks (`CONTRIBUTING.md` → *Source declaration*).
   - Every extension needs at least one `source { }` block. Only `src/all/jellyfin` still sets the legacy `className`,
     which loads a hand-written class (its factory) instead: nothing is generated, and its `source { }` blocks only
     describe the sources for the repo index, so keep them in step with the class.
@@ -97,13 +122,13 @@ loadIndividualExtension("en", "miruro")
 
 See `CONTRIBUTING.md` for full rules. Critical for agents:
 
-- Check `lib/` and `core` (`keiyoushi.utils` for parsing/prefs, `keiyoushi.network` for clients) first – reuse existing libs/helpers instead of custom boilerplate (`parseAs`/`toJsonRequestBody`/`tryParse`/`extractNextJs`/`absUrl`, `rateLimit`/`addCookie`, `lib-cryptoaes`/etc.). See `CONTRIBUTING.md#core-dependencies`.
+- Check `lib/` and `core` (`keiyoushi.utils` for parsing/prefs, `keiyoushi.network` for clients) first – reuse existing libs/helpers instead of custom boilerplate (`parseAs`/`toJsonRequestBody`/`tryParse`/`extractNextJs`/`absUrl`, `rateLimit`/`addCookie`, `lib-cryptoaes`/etc.). See `CONTRIBUTING.md` → *Core dependencies*.
 - Kotlin + Android; web scraping via CSS selectors, OkHttp, Jsoup.
 - Do not use `data class` for `@Serializable` DTOs unless needed; camelCase fields, `@SerialName` only when JSON key differs.
 - Use `response.parseAs<T>()`, `response.asJsoup()`, `SimpleDateFormat(...).tryParse()`, `element.absUrl("href")` + `setUrlWithoutDomain()`.
 - No hardcoded `User-Agent`, no `Thread.sleep()`, no manual Cloudflare checks, no `buildJsonObject` for requests.
 - Preserve `id` when renaming `name`/`lang`; keep package name stable.
-- New or migrated extensions target extensions-lib 16: extend `AnimeHttpSource` directly (not the `keiyoushi.utils.AnimeHttpLegacySource`/`ParsedAnimeHttpLegacySource` shims), implement hosters (`getHosterList`/`getVideoList(hoster)`), use the named `Video(videoUrl =, videoTitle =, ...)` constructor, and set `libVersion = "16"` in `build.gradle.kts`. See `CONTRIBUTING.md#extensions-lib-16`.
+- New or migrated extensions target extensions-lib 16: extend `AnimeHttpSource` directly (not the `keiyoushi.utils.AnimeHttpLegacySource`/`ParsedAnimeHttpLegacySource` shims), implement hosters (`getHosterList`/`getVideoList(hoster)`), use the named `Video(videoUrl =, videoTitle =, ...)` constructor, and set `libVersion = "16"` in `build.gradle.kts`. See `CONTRIBUTING.md` → *Extensions lib 16*.
 
 ### `keiyoushi.network` client helpers
 
@@ -199,7 +224,8 @@ Untracked files can stay where they are, unless the pick adds a file at the same
 
 ## Versioning – bump once per PR, theme bump propagates
 
-Source of truth: `CONTRIBUTING.md:326-365` (individual) + `CONTRIBUTING.md:1466-1591` (themes) + `gradle/build-logic/src/main/kotlin/ExtensionPlugin.kt:128-136`:
+Source of truth: `CONTRIBUTING.md` (*Source declaration* + *Multi-source themes*) and
+`gradle/build-logic/src/main/kotlin/ExtensionPlugin.kt` (`versionCodeProvider`):
 
 ```kotlin
 val versionCodeProvider = themeExtension.flatMap { themeKeiyoushi ->
@@ -213,7 +239,7 @@ Rules:
 - Individual extension (no theme): increment `versionCode` by **1** if code affecting users changed. Bump **once per PR** – do not increment multiple times across commits.
 - Theme (`lib-multisrc/<theme>/build.gradle.kts`): increment `baseVersionCode` by **1** when theme logic changes.
 - When `baseVersionCode` is bumped, **do not** bump `versionCode` for extensions using that theme in the same PR – the addition already bumps every extension's effective version code. Only bump the extension's `versionCode` when the extension itself changed independently of the theme.
-- Checklist mirrors this: `CONTRIBUTING.md#pull-request-checklist` ~ `1785-1786` and `.github/pull_request_template.md:3-4`.
+- Checklist mirrors this: `CONTRIBUTING.md` → *Pull Request checklist*.
 
 ## CI – what it bumps and builds for you
 
@@ -234,6 +260,10 @@ From `.github/workflows/build_pull_request.yml` + `.github/scripts/`:
 
 - `build_push.yml` ("CI") triggers only on pushes to **`master`**; `build_pull_request.yml` ("PR check") runs on PRs.
   **Pushing a feature branch alone runs no build** – open a PR (or push to `master`) to get a compilation check.
+- The PR check filters paths (`'**'`, `'!**.md'`, `'!.github/**'`): a PR that only touches `**.md` **never gets a
+  run and reports no checks** – that is expected, not a broken workflow.
+- The PR check's job "Check extension repo" runs `publish-repo.py` **without pushing** (it ends in `git status`):
+  it only validates the publication script. The real publication happens in `build_push` after the merge to `master`.
 - This fork **publishes to its own repository**, `ruuuberth/anime-repo` (branch `repo`): the upstream gates
   (`github.repository == 'yuzono/anime-extensions'`) were removed from the version-bump, APK-upload and publish jobs,
   and the publish job checks that repo out with `secrets.GITHUB_TOKEN`. The app adds the repository with
@@ -258,12 +288,26 @@ From `.github/workflows/build_pull_request.yml` + `.github/scripts/`:
   the APK as an artifact.
 - Read results with `gh run list --branch <branch>`, `gh run watch <id> --exit-status`, `gh run view <id> --log-failed`.
 
+### Checking what was really published
+
+`raw.githubusercontent.com` serves a **cached** copy of `index.min.json` for ~5 minutes, so a stale version there is not
+proof that the publish failed. Check instead:
+
+```bash
+gh api "repos/ruuuberth/anime-repo/commits?per_page=2" -q '.[] | [.sha[0:9], (.commit.message | split("\n")[0])] | @tsv'
+gh api repos/ruuuberth/anime-repo/contents/index.min.json?ref=repo --jq '.content' | base64 -d | head -c 400
+gh api "repos/ruuuberth/anime-repo/contents/apk?ref=repo" --jq '.[] | select(.name | test("animeav1")) | .name'
+```
+
+The published APK is renamed to `apk/aniyomi-<lang>.<name>-v<libVersion>.<versionCode>.apk`, and the index entry
+carries `version` (`<libVersion>.<versionCode>`) and `code` (`versionCode`).
+
 ## Boundaries
 
 - Do not change `versionName` manually (generated `<libVersion>.<versionCode>`; set `libVersion = "14"` unless the extension uses the lib 16 API, and never lower than its theme's `libVersion`).
 - Do not commit `web_hi_res_512.png` (delete after Icon Generator).
-- Do not push to `upstream` (`no_pushing` – fork workflow `CONTRIBUTING.md:182-211`). Use `origin` (your fork) for PRs.
+- Do not push to `upstream` (`no_pushing` – fork workflow `CONTRIBUTING.md` → *Cloning the repository*). Use `origin` (your fork) for PRs.
 - Never commit secrets, keystore, or `local.properties`.
-- PRs: follow `CONTRIBUTING.md#submitting-the-changes` ~ `1768-1793` (checklist: version bump, `contentWarning`,
+- PRs: follow `CONTRIBUTING.md` → *Submitting the changes* / *Pull Request checklist* (version bump, `contentWarning`,
   unchanged source names, kept `id`, removed `web_hi_res_512.png`); title concise, reference issues (`Closes #xyz`);
   one version bump per module per PR as above.
