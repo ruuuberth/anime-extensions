@@ -54,7 +54,9 @@ import java.util.Locale
  *    (`acc=opt`, `i=<id>`) that answers with the iframe urls hex-encoded.
  */
 @Source
-abstract class AnimeBum : AnimeHttpSource(), ConfigurableAnimeSource {
+abstract class AnimeBum :
+    AnimeHttpSource(),
+    ConfigurableAnimeSource {
 
     override val supportsLatest = true
 
@@ -231,39 +233,42 @@ abstract class AnimeBum : AnimeHttpSource(), ConfigurableAnimeSource {
         fun value(): String = vals[state].second
     }
 
-    private class TypeFilter : ParamFilter(
-        "Tipo",
-        "tipo",
-        arrayOf(
-            "Todos" to "",
-            "Anime" to "anime",
-            "Película" to "pelicula",
-            "Especial" to "especial",
-            "OVA" to "ova",
-            "ONA" to "ona",
-            "Corto" to "corto",
-            "Donghua" to "donghua",
-        ),
-    )
+    private class TypeFilter :
+        ParamFilter(
+            "Tipo",
+            "tipo",
+            arrayOf(
+                "Todos" to "",
+                "Anime" to "anime",
+                "Película" to "pelicula",
+                "Especial" to "especial",
+                "OVA" to "ova",
+                "ONA" to "ona",
+                "Corto" to "corto",
+                "Donghua" to "donghua",
+            ),
+        )
 
-    private class StatusFilter : ParamFilter(
-        "Estado",
-        "estado",
-        arrayOf(
-            "Todos" to "",
-            "Estreno" to "estreno",
-            "Finalizado" to "finalizado",
-        ),
-    )
+    private class StatusFilter :
+        ParamFilter(
+            "Estado",
+            "estado",
+            arrayOf(
+                "Todos" to "",
+                "Estreno" to "estreno",
+                "Finalizado" to "finalizado",
+            ),
+        )
 
-    private class OrderFilter : ParamFilter(
-        "Orden",
-        "orden",
-        arrayOf(
-            "Descendente" to "desc",
-            "Ascendente" to "asc",
-        ),
-    )
+    private class OrderFilter :
+        ParamFilter(
+            "Orden",
+            "orden",
+            arrayOf(
+                "Descendente" to "desc",
+                "Ascendente" to "asc",
+            ),
+        )
 
     // ============================ Preferences =============================
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
