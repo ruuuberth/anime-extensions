@@ -6,22 +6,25 @@ plugins {
 
 yuzono {
     name = "AnimeBum"
-    versionCode = 22
+    versionCode = 23
     contentWarning = ContentWarning.SAFE
-    libVersion = "14"
+    libVersion = "16"
 
     source {
         lang = "es"
-        baseUrl = "https://www.animebum.net"
+        baseUrl = "https://animebum.org"
     }
 }
 
 dependencies {
-    implementation(project(":lib:okruextractor"))
+    implementation(project(":lib:doodextractor"))
+    implementation(project(":lib:filemoonextractor"))
+    implementation(project(":lib:luluextractor"))
+    implementation(project(":lib:mixdropextractor"))
+    implementation(project(":lib:mp4uploadextractor"))
     implementation(project(":lib:streamwishextractor"))
     implementation(project(":lib:universalextractor"))
+    implementation(project(":lib:uqloadextractor"))
     implementation(project(":lib:vidhideextractor"))
-    implementation(project(":lib:vidguardextractor"))
-    implementation(project(":lib:filemoonextractor"))
-    implementation(project(":lib:gdriveplayerextractor"))
+    implementation(project(":lib:voeextractor"))
 }
