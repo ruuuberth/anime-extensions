@@ -19,10 +19,10 @@ Anikku/Animiru (Aniyomi forks).
   git remote add yuzono https://github.com/yuzono/tachiyomi-extensions
   git remote add @secozzi https://github.com/Secozzi/aniyomi-extensions
   ```
-- **Scope: this fork ships only extensions whose site serves anime in Spanish** (Spanish dub or subs). The
-  extensions for other languages and for non-anime sites (films, series, generic torrent/AV hosts) were removed;
-  what is left is `src/es/*` (29), `src/en/*` (19) and `src/all/*` (6). An extension only qualifies if its site
-  offers anime with a Spanish audio or subtitle track – a Spanish-language site alone is not enough.
+- **Scope: this fork ships only extensions whose site serves content in Spanish.** What is left is `src/es/*` (58),
+  `src/en/*` (20) and `src/all/*` (26). The criterion is the **language only** – a site in another language (or
+  without a Spanish track) is out, whatever its content is (anime, films, series, adult, torrents). `src/en/*` keeps
+  only the sites that offer anime with a Spanish audio or subtitle track; `src/all/*` is multi-language, so it stays.
 - Git identity for this repo is already set to `ruuuberth <77597261+ruuuberth@users.noreply.github.com>` (repo-local).
   Commit as that account; never adopt another author's identity.
 
@@ -41,7 +41,7 @@ Anikku/Animiru (Aniyomi forks).
 Work in this order, and do not skip to the code:
 
 1. **Write the plan first.** State what changes, in which module/file, the expected behaviour, the verification step
-   and the version bump that implies. Scope it to one module: the build has ~90 modules.
+   and the version bump that implies. Scope it to one module: the build has ~150 modules.
 2. **Write the failing test next.** Every behaviour change needs an executable check that fails *before* the fix:
    - Shared logic → JUnit 4 test in `core/src/test/kotlin/keiyoushi/utils/` (or `lib/<lib>/test/kotlin/…`), using
      `org.junit.Test` + `org.junit.Assert.*` and descriptive backticked test names.
@@ -56,7 +56,7 @@ Android SDK to run them either. Keep tests self-contained and pure so they can b
 
 ## Commands
 
-**Always scope a task to a module.** The build has ~90 modules (54 extensions + 33 libs + 3 themes + `core` +
+**Always scope a task to a module.** The build has ~150 modules (104 extensions + 37 libs + 5 themes + `core` +
 `compiler`); an unscoped `./gradlew <task>` configures every one of them.
 
 - Verify a change (fast – no APK link/package step): `./gradlew :src:<lang>:<source>:compileDebugKotlin`
@@ -277,7 +277,7 @@ From `.github/workflows/build_pull_request.yml` + `.github/scripts/`:
   applying. The signing-key fingerprint comes from `SIGNING_KEY_FINGERPRINT`, else from the published `repo.json`,
   else the upstream default – **it must match the `meta.signingKeyFingerprint` in `ruuuberth/anime-repo`'s
   `repo.json`**, or the app refuses to trust the APKs.
-- The first successful run in this fork has no base commit, so it is a **full rebuild**: all 54 extensions are built
+- The first successful run in this fork has no base commit, so it is a **full rebuild**: all 104 extensions are built
   and the whole index is replaced by the build output. Later runs build only what changed.
 - Signing secrets in `ruuuberth/anime-extensions`: `SIGNING_KEY` (base64 of the keystore), `ALIAS`,
   `KEY_STORE_PASSWORD`, `KEY_PASSWORD`. **The keystore lives outside the repo** (`~/.config/aniyomi-extensions/`);

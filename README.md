@@ -12,8 +12,9 @@ Anikku/Animiru is a free and open source anime player for Android 8.0 and above.
 
 This repository contains the available extension catalogues for the [Anikku](https://github.com/komikku-app/anikku) or [Animiru](https://github.com/animiruorg/animiru) forks.
 
-> **Scope:** this fork ships only extensions whose site serves **anime in Spanish** (Spanish dub or subs).
-> Extensions for other languages and for non-anime sites (films, series, generic torrent/AV hosts) are not included.
+> **Scope:** this fork ships only extensions whose site serves content **in Spanish**. Extensions whose site is in
+> another language, or that have no Spanish track at all, are not included. The kind of content (anime, films,
+> series, adult, torrents) is not a criterion: only the language is.
 
 ## Recommended apps
 
