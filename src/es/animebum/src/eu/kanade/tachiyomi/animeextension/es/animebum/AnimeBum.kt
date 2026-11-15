@@ -134,7 +134,7 @@ abstract class AnimeBum :
         val firstEpisode = script.attr("data-zr").toIntOrNull() ?: 1
         val lastEpisode = script.attr("data-ep").toIntOrNull() ?: 0
 
-        val numbers = EPISODE_NUMBERS_REGEX.find(script.data())?.groupValues?.get(1)?.let { body -> EPISODE_NUMBER_REGEX.findAll(body).mapNotNull { it.groupValues[1].toIntOrNull() } }.orEmpty()
+        val numbers = EPISODE_NUMBERS_REGEX.find(script.data())?.groupValues?.get(1)?.let { body -> EPISODE_NUMBER_REGEX.findAll(body).mapNotNull { it.groupValues[1].toIntOrNull() }.toList() }.orEmpty()
 
         return numbers
             .filter { it in firstEpisode..lastEpisode }
@@ -174,7 +174,7 @@ abstract class AnimeBum :
             if (url.toHttpUrlOrNull() == null) return@mapNotNull null
             val name = TITLE_REGEX.find(tag)?.groupValues?.get(1)?.removePrefix("Opción ")?.trim()?.takeIf { it.isNotBlank() } ?: "Servidor"
             Hoster(hosterUrl = url, hosterName = name)
-        }.distinctBy { it.hosterUrl }
+        }.distinctBy { it.hosterUrl }.toList()
     }
 
     override suspend fun getVideoList(hoster: Hoster): List<Video> {
