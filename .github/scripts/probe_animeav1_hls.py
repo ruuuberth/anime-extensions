@@ -32,7 +32,8 @@ def extension_flags(repo):
         "src/es/animeav1/src/eu/kanade/tachiyomi/animeextension/es/animeav1/AnimeAv1.kt",
     )
     src = open(src_path, encoding="utf-8").read()
-    idx = src.find('"player.zilla"')
+    # anchor on the resolver branch, not on the label mapping in hosterListParse
+    idx = src.find('"player.zilla" -> {')
     if idx < 0:
         print("no se encuentra la rama player.zilla en AnimeAv1.kt")
         sys.exit(2)
