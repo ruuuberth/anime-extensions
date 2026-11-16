@@ -262,7 +262,19 @@ abstract class AnimeAv1 :
                     .set("Sec-Fetch-Mode", "cors")
                     .set("Sec-Fetch-Site", "same-origin")
                     .build()
-                listOf(Video(videoUrl = m3u, videoTitle = "$prefix HLS", headers = hlsHeaders))
+                listOf(
+                    Video(
+                        videoUrl = m3u,
+                        videoTitle = "$prefix HLS",
+                        headers = hlsHeaders,
+                        // Downloads are muxed by ffmpeg, and its HLS demuxer shifts the
+                        // audio track forward by the length of the first fragment when it
+                        // hits the timestamp discontinuity of the fMP4 fragments, so the
+                        // saved file starts with the audio ~10s late. `-copyts` keeps the
+                        // demuxer timestamps, which are already aligned.
+                        ffmpegVideoArgs = listOf("copyts" to "1"),
+                    ),
+                )
             }
             else -> universalExtractor.videosFromUrl(url, headers, prefix = "$prefix ")
         }
