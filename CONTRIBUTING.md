@@ -1,6 +1,7 @@
 # Contributing
 
-This guide provides instructions and tips on creating a new Anikku extension. Please **read
+This guide provides instructions and tips on creating a new extension for **Aniyomi [ES]**
+(`ruuuberth/aniyomi`), the app this repository is built for. Please **read
 it carefully** if you are a new contributor or lack experience with the required languages
 and knowledge.
 
@@ -1596,7 +1597,13 @@ For local development, use the following run configuration to launch the app dir
 
 ![Android Studio: Run/Debug Configurations](https://i.imgur.com/6s2dvax.png)
 
-Copy the following into `Launch Flags` for the Debug build of Anikku:
+Copy the following into `Launch Flags` for the Debug build of the app:
+
+Aniyomi [ES] (`com.ruuuberth.aniyomi.es`, the app this repository is built for):
+
+```bash
+-W -S -n com.ruuuberth.aniyomi.es.dev/eu.kanade.tachiyomi.ui.main.MainActivity -a eu.kanade.tachiyomi.SHOW_CATALOGUES
+```
 
 Anikku:
 
@@ -1610,10 +1617,11 @@ Aniyomi:
 -W -S -n xyz.jmir.tachiyomi.mi.debug/eu.kanade.tachiyomi.ui.main.MainActivity -a eu.kanade.tachiyomi.SHOW_CATALOGUES
 ```
 
-For other builds, replace `app.anikku.dev` with the corresponding package IDs:
+For other builds, replace `com.ruuuberth.aniyomi.es.dev` with the corresponding package IDs:
 
-- Release build: `app.anikku` or `xyz.jmir.tachiyomi.mi`
-- Preview build: `app.anikku.preview`
+- Aniyomi [ES] release build: `com.ruuuberth.aniyomi.es`
+- Anikku release build: `app.anikku`
+- Aniyomi release build: `xyz.jmir.tachiyomi.mi`
 
 If the extension builds and runs successfully, the code changes should be ready to test in your local app.
 

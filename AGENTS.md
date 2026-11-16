@@ -10,8 +10,13 @@ This checkout is a **fork**: `ruuuberth/anime-extensions` (`origin`) of `yuzono/
 anime-flavoured copy of the manga `keiyoushi/extensions-source`. Kotlin + Jsoup/OkHttp scrapers: one Gradle module per
 extension (`src/<lang>/<source>`), shared CMS logic as themes (`lib-multisrc/<theme>`), shared helpers in `lib/` and
 `core` (`keiyoushi.utils`, `keiyoushi.network`). **This fork publishes its own repository**, `ruuuberth/anime-repo`
-(branch `repo`), so extensions are built and released without depending on an upstream maintainer. The clients are
-Anikku/Animiru (Aniyomi forks).
+(branch `repo`), so extensions are built and released without depending on an upstream maintainer.
+
+**The app these extensions are built for is [Aniyomi [ES]](https://github.com/ruuuberth/aniyomi)** (`ruuuberth/aniyomi`,
+branch `anime-only`, app id `com.ruuuberth.aniyomi.es`): the Spanish anime-only fork of Aniyomi. This repository is its
+extension catalogue, and both are developed together — a change in the app's API belongs in `ruuuberth/aniyomi`, a
+change in a scraper belongs here. The catalogue is also compatible with the [Anikku](https://github.com/komikku-app/anikku)
+and [Animiru](https://github.com/animiruorg/animiru) forks.
 
 - Default branch is **`master`**, not `main`. Upstream remotes `yuzono` and `@secozzi` are **not configured in this
   clone** – add them when a task needs them:

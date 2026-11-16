@@ -1,22 +1,29 @@
 <div align="center">
 
-|                                                                                                                          Install on Anikku                                                                                                                           |                                            Build                                             |                                                                                 Discord                                                                                 |
+|                                                                                                                          Install on Aniyomi [ES]                                                                                                                           |                                            Build                                             |                                                                                 Discord                                                                                 |
 |:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|:--------------------------------------------------------------------------------------------:|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
 | [![Install](https://img.shields.io/badge/Click%20here%20to%20install%20repo-gray?style=flat&labelColor=red)](https://intradeus.github.io/http-protocol-redirector/?r=aniyomi://add-repo?url=https://raw.githubusercontent.com/ruuuberth/anime-repo/repo/index.min.json) | ![CI](https://github.com/ruuuberth/anime-extensions/actions/workflows/build_push.yml/badge.svg) | [![Discord](https://img.shields.io/discord/1377136877491982366.svg?label=&labelColor=6A7EC2&color=7389D8&logo=discord&logoColor=FFFFFF)](https://discord.gg/85MZhUX688) |
 
 ![Visitor Count](https://count.getloli.com/get/@yuzono?theme=capoo-2)
 </div>
 
-# ![app icon](./.github/readme-images/app-icon.png) Anikku/Animiru Extensions
-Anikku/Animiru is a free and open source anime player for Android 8.0 and above.
+# ![app icon](./.github/readme-images/app-icon.png) Aniyomi [ES] Extensions
+Aniyomi [ES] is a free and open source anime player for Android 8.0 and above.
 
-This repository contains the available extension catalogues for the [Anikku](https://github.com/komikku-app/anikku) or [Animiru](https://github.com/animiruorg/animiru) forks.
+This repository contains the available extension catalogues for [Aniyomi [ES]](https://github.com/ruuuberth/aniyomi),
+the Spanish anime-only fork of Aniyomi, and also for the [Anikku](https://github.com/komikku-app/anikku) and
+[Animiru](https://github.com/animiruorg/animiru) forks.
 
 > **Scope:** this fork ships only extensions whose site serves content **in Spanish**. Extensions whose site is in
 > another language, or that have no Spanish track at all, are not included. The kind of content (anime, films,
 > series, adult, torrents) is not a criterion: only the language is.
 
 ## Recommended apps
+
+### [Aniyomi [ES]](https://github.com/ruuuberth/aniyomi)
+
+The app this repository is built for: install the latest release and add the repository from
+**More → Settings → Advanced → Add repository**.
 
 ### [Anikku](https://github.com/komikku-app/anikku)
 
