@@ -23,8 +23,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+
       - name: Check the tools
         run: |
+          set -euo pipefail
           ffmpeg -version | head -1
           python3 --version
 
