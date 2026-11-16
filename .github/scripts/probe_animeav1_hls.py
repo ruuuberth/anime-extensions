@@ -37,10 +37,10 @@ def extension_flags(repo):
         print("no se encuentra la rama player.zilla en AnimeAv1.kt")
         sys.exit(2)
     block = src[idx:idx + 2000]
-    m = re.search(r"ffmpegVideoArgs\s*=\s*listOf\((.*?)\)", block, re.S)
+    m = re.search(r"ffmpegVideoArgs\s*=\s*listOf\(([^)]*)\)", block, re.S)
     if not m:
         return []
-    return re.findall(r'\(\s*"([^"]+)"\s+to\s+"([^"]*)"\s*\)', m.group(1))
+    return re.findall(r'"([^"]+)"\s+to\s+"([^"]*)"', m.group(1))
 
 
 def fetch(url, out):
