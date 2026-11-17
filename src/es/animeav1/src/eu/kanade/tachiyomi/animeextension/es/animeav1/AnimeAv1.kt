@@ -57,9 +57,10 @@ abstract class AnimeAv1 :
 
         private const val PREF_SERVER_KEY = "preferred_server"
         private const val PREF_SERVER_DEFAULT = "HLS"
+        private const val PREF_DISCOVERED_SERVERS_KEY = "discovered_servers"
 
-        // The servers the site actually lists on every episode (SUB/DUB); "Mega"
-        // comes from the episode's download links.
+        // Used until the site's real server names have been observed. "Mega" comes
+        // from the episode's download links.
         private val SERVER_LIST = arrayOf(
             "HLS",
             "UPNShare",
@@ -148,6 +149,19 @@ abstract class AnimeAv1 :
 
     override fun getFilterList(): AnimeFilterList = AnimeAv1Filters.FILTER_LIST
 
+    private fun rememberServers(names: Set<String>) {
+        val labels = names.map { it.trim() }.filter { it.isNotBlank() }.toSet()
+        if (labels.isEmpty()) return
+        val stored = preferences.getStringSet(PREF_DISCOVERED_SERVERS_KEY, emptySet<String>()).orEmpty()
+        if (stored.containsAll(labels)) return
+        preferences.edit().putStringSet(PREF_DISCOVERED_SERVERS_KEY, stored + labels).apply()
+    }
+
+    private fun discoveredServers(): Set<String> {
+        val stored = preferences.getStringSet(PREF_DISCOVERED_SERVERS_KEY, emptySet<String>()).orEmpty()
+        return stored.ifEmpty { SERVER_LIST.toSet() }
+    }
+
     override fun hosterListParse(response: Response): List<Hoster> {
         val doc = response.useAsJsoup()
         val script = doc.selectFirst("script:containsData(node_ids)")?.data() ?: return emptyList()
@@ -175,7 +189,8 @@ abstract class AnimeAv1 :
         val dubServers = servers("DUB", DUB_REGEX)
         val subServers = servers("SUB", SUB_REGEX)
 
-        return (dubServers + subServers).distinctBy { it.first to it.third }.mapNotNull { (url, server, type) ->
+        val seen = mutableSetOf<String>()
+        val hosters = (dubServers + subServers).distinctBy { it.first to it.third }.mapNotNull { (url, server, type) ->
             // Byse videos can't be extracted (signed token + iframe domain allowlist
             // + proof-of-work module), so don't list the hoster; the app would only
             // show it in a collapsed "empty hosters" section.
@@ -187,8 +202,11 @@ abstract class AnimeAv1 :
                 "player.zilla" -> "HLS"
                 else -> SERVER_LIST.firstOrNull { it.equals(matched, true) } ?: server
             }
+            seen += name
             Hoster(hosterUrl = url, hosterName = "$type $name", internalData = HosterData(server, type).toJsonString())
         }
+        rememberServers(seen)
+        return hosters
     }
 
     override suspend fun getVideoList(hoster: Hoster): List<Video> {
@@ -199,7 +217,7 @@ abstract class AnimeAv1 :
     // A stored value from an older version may name a server the site no longer
     // offers; fall back to the default instead of sorting against a dead name.
     private fun preferredServer(): String = preferences.getString(PREF_SERVER_KEY, null)
-        ?.takeIf { it in SERVER_LIST }
+        ?.takeIf { it in discoveredServers() }
         ?: PREF_SERVER_DEFAULT
 
     override fun List<Hoster>.sortHosters(): List<Hoster> {
@@ -317,11 +335,12 @@ abstract class AnimeAv1 :
     }
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        val servers = (discoveredServers() + PREF_SERVER_DEFAULT).sorted().toTypedArray()
         ListPreference(screen.context).apply {
             key = PREF_SERVER_KEY
             title = "Preferred server"
-            entries = SERVER_LIST
-            entryValues = SERVER_LIST
+            entries = servers
+            entryValues = servers
             setDefaultValue(PREF_SERVER_DEFAULT)
             summary = "%s"
         }.also(screen::addPreference)
