@@ -43,8 +43,29 @@ abstract class Animejl :
         private val QUALITY_LIST = arrayOf("1080", "720", "480", "360")
 
         private const val PREF_SERVER_KEY = "preferred_server"
-        private const val PREF_SERVER_DEFAULT = "StreamWish"
-        private val SERVER_LIST = arrayOf("StreamWish", "YourUpload", "Okru", "StreamTape", "StreamHideVid", "Voe", "Uqload", "Mp4upload")
+        private const val PREF_SERVER_DEFAULT = "Hqq"
+        private const val PREF_DISCOVERED_SERVERS_KEY = "discovered_servers"
+        private val FALLBACK_SERVERS = arrayOf("Hqq", "Voe", "Uqload", "Mp4upload", "Okru", "YourUpload")
+
+        // The site rotates hosts per anime, so the list is built from the servers actually seen in the
+        // videos instead of a hardcoded catalog. Aliases keep a single label per host family.
+        private val SERVER_ALIASES = mapOf(
+            "ok" to "Okru",
+            "yourupload" to "YourUpload",
+            "streamtape" to "StreamTape",
+            "playerwish" to "StreamWish",
+            "strwish" to "StreamWish",
+            "wishonly" to "StreamWish",
+            "vidhidepre" to "VidHide",
+            "vidhideplus" to "VidHide",
+            "streamhidevid" to "VidHide",
+        )
+
+        private fun serverLabel(url: String): String {
+            val host = url.substringAfter("://", "").substringBefore("/").removePrefix("www.")
+            val name = host.substringBefore(".").replaceFirstChar { it.uppercaseChar() }
+            return SERVER_ALIASES[name.lowercase()] ?: name
+        }
     }
 
     override fun popularAnimeSelector(): String = "div.Container ul.ListAnimes li article"
@@ -113,13 +134,27 @@ abstract class Animejl :
     private val uqloadExtractor by lazy { UqloadExtractor(client) }
     private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
 
+    private fun rememberServers(urls: List<String>) {
+        val labels = urls.map(::serverLabel).filter { it.isNotBlank() }.toSet()
+        if (labels.isEmpty()) return
+        val stored = preferences.getStringSet(PREF_DISCOVERED_SERVERS_KEY, emptySet<String>()).orEmpty()
+        if (stored.containsAll(labels)) return
+        preferences.edit().putStringSet(PREF_DISCOVERED_SERVERS_KEY, stored + labels).apply()
+    }
+
+    private fun discoveredServers(): Set<String> {
+        val stored = preferences.getStringSet(PREF_DISCOVERED_SERVERS_KEY, emptySet<String>()).orEmpty()
+        return stored.ifEmpty { FALLBACK_SERVERS.toSet() }
+    }
+
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
         val scriptContent = document.selectFirst("script:containsData(var video = [)")?.data()
             ?: return emptyList()
         val videoPattern = Regex("""video\[\d+] = '<iframe src="(.*?)"""")
-        val matches = videoPattern.findAll(scriptContent)
-        return matches.toList().catchingFlatMapBlocking { match ->
+        val matches = videoPattern.findAll(scriptContent).toList()
+        rememberServers(matches.map { it.groupValues[1] })
+        return matches.catchingFlatMapBlocking { match ->
             val url = match.groupValues[1]
             when {
                 url.contains("streamtape") -> listOfNotNull(streamTapeExtractor.videoFromUrl(url))
@@ -181,9 +216,13 @@ abstract class Animejl :
 
     override fun latestUpdatesSelector() = popularAnimeSelector()
 
+    private fun preferredServer(): String = preferences.getString(PREF_SERVER_KEY, null)
+        ?.takeIf { it in discoveredServers() }
+        ?: PREF_SERVER_DEFAULT
+
     override fun List<Video>.sortVideos(): List<Video> {
         val quality = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!
-        val server = preferences.getString(PREF_SERVER_KEY, PREF_SERVER_DEFAULT)!!
+        val server = preferredServer()
         return this.sortedWith(
             compareBy(
                 { it.videoTitle.contains(server, true) },
@@ -194,11 +233,17 @@ abstract class Animejl :
     }
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        val discovered = preferences.getStringSet(PREF_DISCOVERED_SERVERS_KEY, emptySet<String>()).orEmpty()
+        val preferred = preferences.getString(PREF_SERVER_KEY, PREF_SERVER_DEFAULT) ?: PREF_SERVER_DEFAULT
+        val servers = (discovered.ifEmpty { FALLBACK_SERVERS.toSet() } + preferred + PREF_SERVER_DEFAULT)
+            .sorted()
+            .toTypedArray()
+
         ListPreference(screen.context).apply {
             key = PREF_SERVER_KEY
             title = "Preferred server"
-            entries = SERVER_LIST
-            entryValues = SERVER_LIST
+            entries = servers
+            entryValues = servers
             setDefaultValue(PREF_SERVER_DEFAULT)
             summary = "%s"
 

@@ -148,6 +148,19 @@ abstract class AnimeBum :
             .sortedByDescending { it.episode_number }
     }
 
+    private fun rememberServers(names: Set<String>) {
+        val labels = names.map { it.trim().replaceFirstChar { c -> c.uppercaseChar() } }.filter { it.isNotBlank() }.toSet()
+        if (labels.isEmpty()) return
+        val stored = preferences.getStringSet(PREF_DISCOVERED_SERVERS_KEY, emptySet<String>()).orEmpty()
+        if (stored.containsAll(labels)) return
+        preferences.edit().putStringSet(PREF_DISCOVERED_SERVERS_KEY, stored + labels).apply()
+    }
+
+    private fun discoveredServers(): Set<String> {
+        val stored = preferences.getStringSet(PREF_DISCOVERED_SERVERS_KEY, emptySet<String>()).orEmpty()
+        return stored.ifEmpty { SERVER_LIST.toSet() }
+    }
+
     // ============================ Video Links =============================
     override fun hosterListParse(response: Response): List<Hoster> {
         val document = response.useAsJsoup()
@@ -167,14 +180,18 @@ abstract class AnimeBum :
             .build()
         val html = runCatching { client.newCall(POST("$baseUrl/bum", postHeaders, body)).execute().bodyString() }.getOrNull() ?: return emptyList()
 
-        return OPTION_TAG_REGEX.findAll(html).mapNotNull { match ->
+        val seen = mutableSetOf<String>()
+        val hosters = OPTION_TAG_REGEX.findAll(html).mapNotNull { match ->
             val tag = match.value
             val hex = ENCRYPT_REGEX.find(tag)?.groupValues?.get(1) ?: return@mapNotNull null
             val url = runCatching { hex.decodeHexToString() }.getOrNull() ?: return@mapNotNull null
             if (url.toHttpUrlOrNull() == null) return@mapNotNull null
             val name = TITLE_REGEX.find(tag)?.groupValues?.get(1)?.removePrefix("Opción ")?.trim()?.takeIf { it.isNotBlank() } ?: "Servidor"
+            seen += name
             Hoster(hosterUrl = url, hosterName = name)
         }.distinctBy { it.hosterUrl }.toList()
+        rememberServers(seen)
+        return hosters
     }
 
     override suspend fun getVideoList(hoster: Hoster): List<Video> {
@@ -272,11 +289,12 @@ abstract class AnimeBum :
 
     // ============================ Preferences =============================
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        val servers = (discoveredServers() + PREF_SERVER_DEFAULT).sorted().toTypedArray()
         ListPreference(screen.context).apply {
             key = PREF_SERVER_KEY
             title = "Preferred server"
-            entries = SERVER_LIST
-            entryValues = SERVER_LIST
+            entries = servers
+            entryValues = servers
             setDefaultValue(PREF_SERVER_DEFAULT)
             summary = "%s"
 
@@ -302,7 +320,7 @@ abstract class AnimeBum :
     // A value stored by an older version may name a server the site does not offer;
     // fall back to the default instead of sorting against a dead name.
     private fun preferredServer(): String = preferences.getString(PREF_SERVER_KEY, null)
-        ?.takeIf { it in SERVER_LIST }
+        ?.takeIf { it in discoveredServers() }
         ?: PREF_SERVER_DEFAULT
 
     // ============================ Extractors ==============================
@@ -324,8 +342,9 @@ abstract class AnimeBum :
 
         private const val PREF_SERVER_KEY = "preferred_server"
         private const val PREF_SERVER_DEFAULT = "Voe"
+        private const val PREF_DISCOVERED_SERVERS_KEY = "discovered_servers"
 
-        // The servers the site offers on every episode.
+        // Used until the site's real server names have been observed.
         private val SERVER_LIST = arrayOf(
             "Voe",
             "Filemoon",
